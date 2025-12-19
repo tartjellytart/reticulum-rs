@@ -1,0 +1,65 @@
+[package]
+name = "reticulum-rs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/markqvist/Reticulum"
+description = """
+Rust implementation of the Reticulum Network Stack - a cryptographic, 
+decentralised, and resilient mesh networking protocol designed for communication 
+over any physical layer.
+"""
+
+[dependencies]
+
+# Async runtime
+tokio = { version = "1.44", features = ["full"] }
+tokio-stream = { version = "0.1" }
+tokio-util = { version = "0.7", features = ["codec"] }
+
+# Cryptography
+x25519-dalek = { version = "3.0.0-pre.3", features = ["static_secrets"] }
+ed25519-dalek = { version = "3.0.0-pre.3" }
+aes = "0.8"
+cbc = "0.1"
+hkdf = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+sha3 = "0.10"
+
+# Random number generation
+rand_core = { version = "0.6", features = ["getrandom"] }
+getrandom = "0.2"
+
+# Serialization
+rmp-serde = "1.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_bytes = "0.11"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Error handling
+thiserror = "1.0"
+
+# Utilities
+hex = "0.4"
+bytes = "1.5"
+heapless = "0.8"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[features]
+default = ["std"]
+std = []
+
+[[example]]
+name = "minimal"
+path = "examples/minimal.rs"
+
+[[example]]
+name = "host_wifi"
+path = "examples/host_wifi.rs"
