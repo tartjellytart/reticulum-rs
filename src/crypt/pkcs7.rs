@@ -1,8 +1,7 @@
 //! PKCS7 padding implementation
 
+use alloc::vec::Vec;
 use crate::error::{RnsError, Result};
-
-const BLOCKSIZE: usize = 16;
 
 /// Pad data using PKCS7
 pub fn pkcs7_pad(data: &[u8], block_size: usize) -> Vec<u8> {
@@ -38,6 +37,7 @@ pub fn pkcs7_unpad(data: &[u8], block_size: usize) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    const BLOCKSIZE: usize = 16;
 
     #[test]
     fn test_pkcs7_pad_unpad() {

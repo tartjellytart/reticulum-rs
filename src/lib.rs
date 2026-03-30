@@ -5,7 +5,6 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 pub mod error;
@@ -16,8 +15,10 @@ pub mod crypt;
 pub mod buffer;
 pub mod destination;
 pub mod link;
+#[cfg(feature = "std")]
 pub mod transport;
 pub mod interfaces;
+#[cfg(feature = "std")]
 pub mod reticulum;
 
 // Re-export commonly used types
@@ -26,6 +27,7 @@ pub use identity::{Identity, FullIdentity};
 pub use packet::Packet;
 pub use destination::Destination;
 pub use link::Link;
+#[cfg(feature = "std")]
 pub use reticulum::{Reticulum, MTU};
 
 

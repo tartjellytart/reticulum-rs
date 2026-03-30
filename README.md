@@ -22,6 +22,26 @@ cargo build
 cargo run --example minimal
 ```
 
+## Embedded Consumption (ESP32)
+
+This crate now supports an embedded-oriented build surface by disabling default features:
+
+```bash
+cargo check --no-default-features
+```
+
+For ESP32 firmware projects (for example, a separate `wifi-test` app), depend on this crate with default features disabled:
+
+```toml
+[dependencies]
+reticulum-rs = { path = "../reticulum-rs", default-features = false }
+```
+
+Notes:
+- `transport` and `reticulum` modules are `std`-gated.
+- `interfaces::wrapper` and host WiFi driver are `std`/`tokio`-gated.
+- Embedded consumers should use interface-level APIs (for example WiFi traits/drivers) until full transport parity is implemented for no_std targets.
+
 ## License
 
 MIT

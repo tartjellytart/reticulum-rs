@@ -1,5 +1,6 @@
 //! Packet handling for Reticulum
 
+use alloc::vec::Vec;
 use crate::error::{RnsError, Result};
 use crate::hash::AddressHash;
 

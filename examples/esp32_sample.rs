@@ -25,10 +25,11 @@ async fn main(spawner: Spawner) {
     
     let driver = Esp32WiFiDriver::new(wifi_controller, stack);
     
-// DO NOT COMMIT CREDENTIALS
+// Configure WiFi credentials via environment or config file
+// SECURITY: Do not commit real credentials to source control
     let config = WiFiConfig {
-        ssid: "SomewhereBetter".into(),
-        password: "H0p3l3$$N!nj@".into(),
+        ssid: option_env!("WIFI_SSID").unwrap_or("ConfigureMe").into(),
+        password: option_env!("WIFI_PASSWORD").unwrap_or("ConfigureMe").into(),
         channel: None,
         mode: WiFiMode::Station,
     };

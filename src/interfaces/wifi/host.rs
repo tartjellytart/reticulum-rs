@@ -6,16 +6,14 @@ use std::sync::Arc;
 pub struct HostWiFiDriver {
     socket: Option<Arc<UdpSocket>>,
     local_addr: Option<([u8; 4], u16)>,
-    broadcast_addr: ([u8; 4], u16),
     connected: bool,
 }
 
 impl HostWiFiDriver {
-    pub fn new(_bind_port: u16, broadcast_port: u16) -> Self {
+    pub fn new(_bind_port: u16, _broadcast_port: u16) -> Self {
         Self {
             socket: None,
             local_addr: None,
-            broadcast_addr: ([255, 255, 255, 255], broadcast_port),
             connected: false,
         }
     }

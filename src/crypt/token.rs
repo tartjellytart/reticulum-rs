@@ -3,6 +3,7 @@
 use aes::Aes256;
 use cbc::{Decryptor, Encryptor};
 use cbc::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use alloc::vec::Vec;
 use cbc::cipher::block_padding::Pkcs7;
 use crate::crypt::hmac::HmacSha256;
 use crate::error::{RnsError, Result};

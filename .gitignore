@@ -3,4 +3,5 @@
 Cargo.lock
 *.pdb
 CONTEXT.md
+examples/esp32_sample.rs
 

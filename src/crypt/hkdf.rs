@@ -1,5 +1,7 @@
 //! HKDF (HMAC-based Key Derivation Function) implementation
 
+use alloc::vec;
+use alloc::vec::Vec;
 use hkdf::Hkdf;
 use sha2::Sha256;
 use crate::error::{RnsError, Result};

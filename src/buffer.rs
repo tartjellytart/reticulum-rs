@@ -1,4 +1,4 @@
-//! Buffer utilities for Reticulum
+ //! Buffer utilities for Reticulum
 
 use crate::error::{RnsError, Result};
 

@@ -1,58 +1,112 @@
 //! Error types for Reticulum
+//! 
+//! Provides specific, actionable error types for production diagnostics
+//! and error handling in embedded and networked systems.
 
-use thiserror::Error;
+use alloc::string::String;
+use core::fmt;
 
 /// Main error type for Reticulum operations
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
+/// 
+/// Provides specific error variants for different failure modes, enabling
+/// precise error handling and diagnostics in embedded systems.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RnsError {
-    #[error("Out of memory")]
+    /// Memory allocation failed
     OutOfMemory,
 
-    #[error("Invalid argument")]
+    /// Invalid argument provided to function
     InvalidArgument,
 
-    #[error("Incorrect signature")]
+    /// Cryptographic signature verification failed
     IncorrectSignature,
 
-    #[error("Incorrect hash")]
+    /// Hash verification failed
     IncorrectHash,
 
-    #[error("Cryptography error")]
+    /// Cryptography operation failed
     CryptoError,
 
-    #[error("Packet error")]
+    /// Packet parsing or construction failed
     PacketError,
 
-    #[error("Connection error")]
+    /// Network connection failed or closed
     ConnectionError,
 
-    #[error("Timeout")]
+    /// Operation timeout
     Timeout,
 
-    #[error("Invalid packet format")]
+    /// Invalid packet format or structure
     InvalidPacketFormat,
 
-    #[error("Destination not found")]
+    /// Destination address not found or unreachable
     DestinationNotFound,
 
-    #[error("Link not established")]
+    /// Link establishment failed
     LinkNotEstablished,
 
-    #[error("Transport error")]
+    /// Transport layer error
     TransportError,
 
-    #[error("Interface error: {interface_name}")]
-    InterfaceError { interface_name: String },
+    /// Interface-specific error with context
+    InterfaceError { 
+        /// Name of the interface that failed
+        interface_name: String 
+    },
 
-    #[error("Serialization error")]
+    /// Serialization or encoding failed
     SerializationError,
 
-    #[error("IO error: {0}")]
+    /// Generic I/O error with description
     IoError(String),
 
-    #[error("Mutex lock error")]
+    /// Mutex lock poisoned
     LockError,
+
+    /// Device not found or not available
+    DeviceNotFound,
+
+    /// Permission denied for operation
+    PermissionDenied,
+
+    /// Invalid configuration
+    InvalidConfiguration,
+
+    /// Operation not supported on this platform/interface
+    NotSupported,
 }
+
+impl fmt::Display for RnsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::OutOfMemory => write!(f, "Out of memory"),
+            Self::InvalidArgument => write!(f, "Invalid argument"),
+            Self::IncorrectSignature => write!(f, "Incorrect signature"),
+            Self::IncorrectHash => write!(f, "Incorrect hash"),
+            Self::CryptoError => write!(f, "Cryptography error"),
+            Self::PacketError => write!(f, "Packet error"),
+            Self::ConnectionError => write!(f, "Connection error"),
+            Self::Timeout => write!(f, "Timeout"),
+            Self::InvalidPacketFormat => write!(f, "Invalid packet format"),
+            Self::DestinationNotFound => write!(f, "Destination not found"),
+            Self::LinkNotEstablished => write!(f, "Link not established"),
+            Self::TransportError => write!(f, "Transport error"),
+            Self::InterfaceError { interface_name } => {
+                write!(f, "Interface error: {interface_name}")
+            }
+            Self::SerializationError => write!(f, "Serialization error"),
+            Self::IoError(err) => write!(f, "IO error: {err}"),
+            Self::LockError => write!(f, "Mutex lock error"),
+            Self::DeviceNotFound => write!(f, "Device not found"),
+            Self::PermissionDenied => write!(f, "Permission denied"),
+            Self::InvalidConfiguration => write!(f, "Invalid configuration"),
+            Self::NotSupported => write!(f, "Operation not supported"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for RnsError {}
 
 impl From<core::fmt::Error> for RnsError {
     fn from(_: core::fmt::Error) -> Self {

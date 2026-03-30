@@ -3,113 +3,89 @@ mod traits;
 pub use traits::{SerialDriver, SerialConfig, StopBits, Parity, FlowControl};
 
 use crate::error::{RnsError, Result};
-use crate::interfaces::{Interface, InterfaceMode};
+use crate::interfaces::{Interface, InterfaceMode, InterfaceStateFields, hdlc::{HdlcDecoder, HdlcEncoder}};
 use crate::hash::{AddressHash, HashGenerator};
 
-const HDLC_FLAG: u8 = 0x7E;
-const HDLC_ESC: u8 = 0x7D;
-const HDLC_ESC_MASK: u8 = 0x20;
-
 pub struct SerialInterface<D: SerialDriver> {
-    driver: D,
-    config: SerialConfig,
-    name: String,
-    online: bool,
-    rxb: u64,
-    txb: u64,
-    bitrate: u64,
-    mtu: usize,
-    frame_buffer: Vec<u8>,
-    in_frame: bool,
-    escape: bool,
+    serial_driver: D,
+    serial_config: SerialConfig,
+    state: InterfaceStateFields,
+    hdlc_decoder: HdlcDecoder,
 }
 
 impl<D: SerialDriver> SerialInterface<D> {
-    pub fn new(driver: D, config: SerialConfig, name: &str) -> Result<Self> {
-        let bitrate = config.baud_rate as u64;
+    /// Create a new Serial interface
+    /// 
+    /// Initializes a serial port connection with HDLC framing for reliable packet transmission.
+    /// The interface is created in offline state and must be started with [`start()`](Self::start).
+    /// 
+    /// # Arguments
+    /// * `serial_driver` - The underlying serial port driver implementation
+    /// * `serial_config` - Serial port configuration (baud rate, parity, etc.)
+    /// * `name` - Human-readable name for this interface (e.g., "COM1" or "ttyUSB0")
+    /// 
+    /// # Returns
+    /// A new SerialInterface instance ready to be started
+    pub fn new(serial_driver: D, serial_config: SerialConfig, name: &str) -> Result<Self> {
+        let bitrate = serial_config.baud_rate as u64;
         Ok(Self {
-            driver,
-            config,
-            name: name.to_string(),
-            online: false,
-            rxb: 0,
-            txb: 0,
-            bitrate,
-            mtu: 500,
-            frame_buffer: Vec::new(),
-            in_frame: false,
-            escape: false,
+            serial_driver,
+            serial_config,
+            state: InterfaceStateFields::new(name, bitrate, 500),
+            hdlc_decoder: HdlcDecoder::new(),
         })
     }
     
+    /// Start the serial interface
+    /// 
+    /// Opens the serial port and marks the interface as online.
+    /// Must be called before the interface can transmit or receive data.
+    /// 
+    /// # Errors
+    /// Returns error if the serial port cannot be opened (already in use, permission denied, etc.)
     pub fn start(&mut self) -> Result<()> {
-        self.driver.open()?;
-        self.online = true;
+        self.serial_driver.open()?;
+        self.state.online = true;
         Ok(())
     }
     
+    /// Stop the serial interface
+    /// 
+    /// Closes the serial port and marks the interface as offline.
+    /// Any queued data is sent before closing.
+    /// 
+    /// # Errors
+    /// Returns error if the serial port cannot be closed cleanly
     pub fn stop(&mut self) -> Result<()> {
-        self.driver.close()?;
-        self.online = false;
+        self.serial_driver.close()?;
+        self.state.online = false;
         Ok(())
     }
     
+    /// Read and process incoming data from the serial port
+    /// 
+    /// Reads available data from the serial port and processes it through the HDLC decoder.
+    /// Calls [`process_incoming()`](Interface::process_incoming) for each complete frame received.
+    /// 
+    /// This method should be called regularly (e.g., in a main loop or interrupt handler)
+    /// to prevent the input buffer from overflowing.
+    /// 
+    /// # Errors
+    /// Returns error if serial read fails or HDLC frame processing fails
     pub fn read_and_process(&mut self) -> Result<()> {
         let mut buffer = [0u8; 256];
-        let bytes_read = self.driver.read(&mut buffer)?;
+        let bytes_read = self.serial_driver.read(&mut buffer)?;
         
         if bytes_read > 0 {
             for &byte in &buffer[..bytes_read] {
-                self.process_hdlc_byte(byte)?;
-            }
-        }
-        
-        Ok(())
-    }
-    
-    fn process_hdlc_byte(&mut self, byte: u8) -> Result<()> {
-        if byte == HDLC_FLAG {
-            if self.in_frame && !self.frame_buffer.is_empty() {
-                // Complete frame received
-                let frame_data = self.frame_buffer.clone();
-                self.rxb += frame_data.len() as u64;
-                self.frame_buffer.clear();
-                self.process_incoming(&frame_data)?;
-            }
-            self.in_frame = true;
-            self.escape = false;
-        } else if self.in_frame {
-            if byte == HDLC_ESC {
-                self.escape = true;
-            } else {
-                if self.escape {
-                    let unescaped = byte ^ HDLC_ESC_MASK;
-                    self.frame_buffer.push(unescaped);
-                    self.escape = false;
-                } else {
-                    self.frame_buffer.push(byte);
+                if let Some(frame_data) = self.hdlc_decoder.process_byte(byte)? {
+                    self.state.rx_bytes += frame_data.len() as u64;
+                    self.process_incoming(&frame_data)?;
                 }
             }
         }
         
         Ok(())
-    }
-    
-    fn escape_hdlc(&self, data: &[u8]) -> Vec<u8> {
-        let mut escaped = Vec::with_capacity(data.len() + 2);
-        escaped.push(HDLC_FLAG);
-        
-        for &byte in data {
-            if byte == HDLC_FLAG || byte == HDLC_ESC {
-                escaped.push(HDLC_ESC);
-                escaped.push(byte ^ HDLC_ESC_MASK);
-            } else {
-                escaped.push(byte);
-            }
-        }
-        
-        escaped.push(HDLC_FLAG);
-        escaped
     }
     
 }
@@ -120,19 +96,19 @@ impl<D: SerialDriver> Interface for SerialInterface<D> {
     }
     
     fn process_outgoing(&mut self, data: &[u8]) -> Result<()> {
-        if !self.online {
+        if !self.state.online {
             return Err(RnsError::ConnectionError);
         }
         
-        let framed = self.escape_hdlc(data);
-        self.driver.write(&framed)?;
-        self.driver.flush()?;
-        self.txb += data.len() as u64;
+        let framed = HdlcEncoder::encode(data);
+        self.serial_driver.write(&framed)?;
+        self.serial_driver.flush()?;
+        self.state.tx_bytes += data.len() as u64;
         Ok(())
     }
     
     fn name(&self) -> &str {
-        &self.name
+        &self.state.name
     }
     
     fn mode(&self) -> InterfaceMode {
@@ -140,29 +116,29 @@ impl<D: SerialDriver> Interface for SerialInterface<D> {
     }
     
     fn is_online(&self) -> bool {
-        self.online
+        self.state.online
     }
     
     fn bitrate(&self) -> u64 {
-        self.bitrate
+        self.state.bitrate
     }
     
     fn mtu(&self) -> usize {
-        self.mtu
+        self.state.mtu
     }
     
     fn rxb(&self) -> u64 {
-        self.rxb
+        self.state.rx_bytes
     }
     
     fn txb(&self) -> u64 {
-        self.txb
+        self.state.tx_bytes
     }
     
     fn interface_hash(&self) -> AddressHash {
         let hash = HashGenerator::new()
-            .chain_update(self.name.as_bytes())
-            .chain_update(&self.config.baud_rate.to_le_bytes())
+            .chain_update(self.state.name.as_bytes())
+            .chain_update(&self.serial_config.baud_rate.to_le_bytes())
             .finalize();
         AddressHash::new_from_hash(hash.as_bytes())
     }

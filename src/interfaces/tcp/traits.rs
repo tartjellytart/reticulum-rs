@@ -1,5 +1,6 @@
 //! TCP Client driver traits for testable architecture
 
+use alloc::string::String;
 use crate::error::Result;
 
 /// TCP Client configuration
@@ -13,6 +14,7 @@ pub struct TcpClientConfig {
 }
 
 /// TCP Client driver abstraction for testability
+#[allow(async_fn_in_trait)]
 pub trait TcpClientDriver: Send + Sync {
     /// Connect to the TCP server
     async fn connect(&mut self, host: &str, port: u16) -> Result<()>;

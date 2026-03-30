@@ -13,6 +13,7 @@ pub struct EthernetConfig {
 }
 
 /// Ethernet driver abstraction for testability
+#[allow(async_fn_in_trait)]
 pub trait EthernetDriver: Send + Sync {
     /// Initialize the Ethernet interface
     fn init(&mut self, config: &EthernetConfig) -> Result<()>;

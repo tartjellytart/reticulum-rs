@@ -1,5 +1,6 @@
 //! Identity management for Reticulum
 
+use alloc::vec::Vec;
 use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer};
 use x25519_dalek::{StaticSecret, PublicKey, SharedSecret};
 use rand_core::{CryptoRngCore, RngCore};

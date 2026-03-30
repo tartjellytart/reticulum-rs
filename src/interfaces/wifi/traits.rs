@@ -1,5 +1,7 @@
+use alloc::string::String;
 use crate::error::Result;
 
+#[allow(async_fn_in_trait)]
 pub trait WiFiDriver: Send + Sync {
     async fn connect(&mut self, ssid: &str, password: &str) -> Result<()>;
     async fn disconnect(&mut self) -> Result<()>;

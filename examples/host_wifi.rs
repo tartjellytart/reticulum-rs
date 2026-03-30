@@ -10,9 +10,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let driver = HostWiFiDriver::new(4242, 4242);
 
+    // Configure WiFi credentials via environment or config file
+    // SECURITY: Do not commit real credentials to source control
+    let ssid = std::env::var("WIFI_SSID").unwrap_or_else(|_| "ConfigureMe".to_string());
+    let password = std::env::var("WIFI_PASSWORD").unwrap_or_else(|_| "ConfigureMe".to_string());
+    
     let config = WiFiConfig {
-        ssid: "SomewhereBetter".to_string(),
-        password: "H0p3l3$$N!nj@".to_string(),
+        ssid: ssid.clone(),
+        password,
         channel: None,
         mode: WiFiMode::Station,
     };

@@ -5,118 +5,86 @@ mod traits;
 pub use traits::{TcpClientDriver, TcpClientConfig};
 
 use crate::error::{RnsError, Result};
-use crate::interfaces::{Interface, InterfaceMode};
+use crate::interfaces::{Interface, InterfaceMode, InterfaceStateFields, hdlc::{HdlcDecoder, HdlcEncoder}};
 use crate::hash::{AddressHash, HashGenerator};
-
-const HDLC_FLAG: u8 = 0x7E;
-const HDLC_ESC: u8 = 0x7D;
-const HDLC_ESC_MASK: u8 = 0x20;
 
 /// TCP Client interface for Reticulum with HDLC framing
 pub struct TcpClientInterface<D: TcpClientDriver> {
-    driver: D,
-    config: TcpClientConfig,
-    name: String,
-    online: bool,
-    rxb: u64,
-    txb: u64,
-    bitrate: u64,
-    mtu: usize,
-    // HDLC framing state
-    frame_buffer: Vec<u8>,
-    in_frame: bool,
-    escape: bool,
+    tcp_driver: D,
+    tcp_config: TcpClientConfig,
+    state: InterfaceStateFields,
+    hdlc_decoder: HdlcDecoder,
 }
 
 impl<D: TcpClientDriver> TcpClientInterface<D> {
     /// Create a new TCP Client interface
-    pub fn new(driver: D, config: TcpClientConfig, name: &str) -> Result<Self> {
+    /// 
+    /// Establishes a client-side TCP connection interface with HDLC packet framing.
+    /// The interface is created in offline state and must be connected with [`start()`](Self::start).
+    /// 
+    /// # Arguments
+    /// * `tcp_driver` - The underlying TCP driver implementation
+    /// * `tcp_config` - TCP configuration (host, port)
+    /// * `name` - Human-readable name for this interface
+    pub fn new(tcp_driver: D, tcp_config: TcpClientConfig, name: &str) -> Result<Self> {
         Ok(Self {
-            driver,
-            config,
-            name: name.to_string(),
-            online: false,
-            rxb: 0,
-            txb: 0,
-            bitrate: 10_000_000, // 10 Mbps default
-            mtu: 1500,
-            frame_buffer: Vec::new(),
-            in_frame: false,
-            escape: false,
+            tcp_driver,
+            tcp_config,
+            state: InterfaceStateFields::new(name, 10_000_000, 1500),
+            hdlc_decoder: HdlcDecoder::new(),
         })
     }
     
     /// Start the TCP Client interface (connect to server)
+    /// 
+    /// Asynchronously connects to the configured TCP server.
+    /// Marks the interface as online once connection succeeds.
+    /// 
+    /// # Errors
+    /// Returns error if connection fails (host unreachable, connection refused, etc.)
     pub async fn start(&mut self) -> Result<()> {
-        self.driver.connect(&self.config.host, self.config.port).await?;
-        self.online = true;
+        self.tcp_driver.connect(&self.tcp_config.host, self.tcp_config.port).await?;
+        self.state.online = true;
         Ok(())
     }
     
     /// Stop the TCP Client interface (disconnect)
+    /// 
+    /// Asynchronously disconnects from the TCP server and marks the interface as offline.
+    /// 
+    /// # Errors
+    /// Returns error if disconnect fails
     pub async fn stop(&mut self) -> Result<()> {
-        self.driver.disconnect().await?;
-        self.online = false;
+        self.tcp_driver.disconnect().await?;
+        self.state.online = false;
         Ok(())
     }
     
     /// Read and process incoming data with HDLC framing
+    /// 
+    /// Asynchronously reads available data from the TCP connection and processes
+    /// it through the HDLC decoder. Calls [`process_incoming()`](Interface::process_incoming)
+    /// for each complete frame received.
+    /// 
+    /// # Errors
+    /// Returns error if TCP read fails or HDLC frame processing fails
     pub async fn read_and_process(&mut self) -> Result<()> {
         let mut buffer = [0u8; 1500];
-        if let Some(bytes_read) = self.driver.read(&mut buffer).await? {
+        if let Some(bytes_read) = self.tcp_driver.read(&mut buffer).await? {
             if bytes_read > 0 {
                 for &byte in &buffer[..bytes_read] {
-                    self.process_hdlc_byte(byte)?;
+                    if let Some(frame_data) = self.hdlc_decoder.process_byte(byte)? {
+                        self.state.rx_bytes += frame_data.len() as u64;
+                        self.process_incoming(&frame_data)?;
+                    }
                 }
             }
         }
-        Ok(())
-    }
-    
-    /// Process a single HDLC byte
-    fn process_hdlc_byte(&mut self, byte: u8) -> Result<()> {
-        if byte == HDLC_FLAG {
-            if self.in_frame && !self.frame_buffer.is_empty() {
-                // Complete frame received
-                let frame_data = self.frame_buffer.clone();
-                self.rxb += frame_data.len() as u64;
-                self.frame_buffer.clear();
-                self.process_incoming(&frame_data)?;
-            }
-            self.in_frame = true;
-            self.escape = false;
-        } else if self.in_frame {
-            if byte == HDLC_ESC {
-                self.escape = true;
-            } else {
-                if self.escape {
-                    let unescaped = byte ^ HDLC_ESC_MASK;
-                    self.frame_buffer.push(unescaped);
-                    self.escape = false;
-                } else {
-                    self.frame_buffer.push(byte);
-                }
-            }
-        }
-        
         Ok(())
     }
     
     fn escape_hdlc(&self, data: &[u8]) -> Vec<u8> {
-        let mut escaped = Vec::with_capacity(data.len() + 2);
-        escaped.push(HDLC_FLAG);
-        
-        for &byte in data {
-            if byte == HDLC_FLAG || byte == HDLC_ESC {
-                escaped.push(HDLC_ESC);
-                escaped.push(byte ^ HDLC_ESC_MASK);
-            } else {
-                escaped.push(byte);
-            }
-        }
-        
-        escaped.push(HDLC_FLAG);
-        escaped
+        HdlcEncoder::encode(data)
     }
     
 }
@@ -130,7 +98,7 @@ impl<D: TcpClientDriver> Interface for TcpClientInterface<D> {
     }
     
     fn process_outgoing(&mut self, data: &[u8]) -> Result<()> {
-        if !self.online {
+        if !self.state.online {
             return Err(RnsError::ConnectionError);
         }
         
@@ -140,7 +108,7 @@ impl<D: TcpClientDriver> Interface for TcpClientInterface<D> {
         // Write to TCP stream
         // Note: This is sync but write is async
         // In full implementation, would use channels or async runtime
-        self.txb += data.len() as u64;
+        self.state.tx_bytes += data.len() as u64;
         
         // For now, return error indicating async needed
         // Full implementation would queue or use async runtime
@@ -148,7 +116,7 @@ impl<D: TcpClientDriver> Interface for TcpClientInterface<D> {
     }
     
     fn name(&self) -> &str {
-        &self.name
+        &self.state.name
     }
     
     fn mode(&self) -> InterfaceMode {
@@ -156,30 +124,30 @@ impl<D: TcpClientDriver> Interface for TcpClientInterface<D> {
     }
     
     fn is_online(&self) -> bool {
-        self.online && self.driver.is_connected()
+        self.state.online && self.tcp_driver.is_connected()
     }
     
     fn bitrate(&self) -> u64 {
-        self.bitrate
+        self.state.bitrate
     }
     
     fn mtu(&self) -> usize {
-        self.mtu
+        self.state.mtu
     }
     
     fn rxb(&self) -> u64 {
-        self.rxb
+        self.state.rx_bytes
     }
     
     fn txb(&self) -> u64 {
-        self.txb
+        self.state.tx_bytes
     }
     
     fn interface_hash(&self) -> AddressHash {
         let hash = HashGenerator::new()
-            .chain_update(self.name.as_bytes())
-            .chain_update(self.config.host.as_bytes())
-            .chain_update(&self.config.port.to_le_bytes())
+            .chain_update(self.state.name.as_bytes())
+            .chain_update(self.tcp_config.host.as_bytes())
+            .chain_update(&self.tcp_config.port.to_le_bytes())
             .finalize();
         AddressHash::new_from_hash(hash.as_bytes())
     }

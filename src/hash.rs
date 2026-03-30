@@ -1,5 +1,6 @@
 //! Hash utilities for Reticulum
 
+use alloc::string::String;
 use sha2::{Digest, Sha256, Sha512};
 use crate::error::{RnsError, Result};
 
