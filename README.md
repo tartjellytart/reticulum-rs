@@ -6,6 +6,11 @@ A work-in-progress Rust implementation of the [Reticulum Network Stack](https://
 
 Reticulum is a cryptography-based networking stack for building resilient mesh networks over any medium. This is an experimental Rust port focused on performance and embedded systems support, For the time being it has only been successfully tested with an esp32 wroom module.
 
+
+Used this project here for testing with the esp32:
+
+https://github.com/tartjellytart/reticulum_wifi_installer
+
 ## Status
 
 Early development. Core components implemented:
